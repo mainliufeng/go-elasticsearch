@@ -1109,3 +1109,37 @@ func TestRequestCompression(t *testing.T) {
 		})
 	}
 }
+
+func TestTransportPerformAndReadMetricsResponses(t *testing.T) {
+	t.Run("Executes", func(t *testing.T) {
+		u, _ := url.Parse("https://foo.com/bar")
+		tp, _ := New(Config{
+			EnableMetrics: true,
+			URLs:          []*url.URL{u},
+			Transport: &mockTransp{
+				RoundTripFunc: func(req *http.Request) (*http.Response, error) { return &http.Response{Status: "MOCK"}, nil },
+			}})
+
+		go func() {
+			for {
+				metrics, _ := tp.Metrics()
+				t.Logf("len(responses): %v", len(metrics.Responses))
+				for code, num := range metrics.Responses {
+					t.Logf("%v(%v)", code, num)
+				}
+			}
+		}()
+
+		for i := 0; i < 100000; i++ {
+			req, _ := http.NewRequest("GET", "/abc", nil)
+			res, err := tp.Perform(req)
+			if err != nil {
+				t.Fatalf("Unexpected error: %s", err)
+			}
+
+			if res.Status != "MOCK" {
+				t.Errorf("Unexpected response: %+v", res)
+			}
+		}
+	})
+}
